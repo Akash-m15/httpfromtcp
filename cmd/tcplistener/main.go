@@ -5,6 +5,7 @@ import (
 	"io"
 	"log"
 	"net"
+	"time"
 
 	"github.com/Akash-m15/httpfromtcp/internal/request"
 )
@@ -60,6 +61,7 @@ func main() {
 	}
 
 	conn, err := listener.Accept()
+	conn.SetReadDeadline(time.Now().Add(10 * time.Second))
 	if err != nil {
 		log.Fatalf("Error while making a connection: %v", err)
 	}
@@ -79,6 +81,7 @@ func main() {
 
 	response := "HTTP/1.1 200 OK\r\n" +
 		"Content-Length: 2\r\n" +
+		"Connection: close\r\n" +
 		"\r\n" +
 		"OK"
 
@@ -86,4 +89,5 @@ func main() {
 	if err != nil {
 		log.Printf("Error writing response: %v", err)
 	}
+	conn.Close()
 }
