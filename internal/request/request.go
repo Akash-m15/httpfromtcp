@@ -37,7 +37,7 @@ type RequestLine struct {
 func newRequest() *Request {
 	return &Request{
 		State:   StateInitialized,
-		Headers: map[string]string{},
+		Headers: headers.NewHeaders(),
 	}
 }
 
