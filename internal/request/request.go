@@ -47,7 +47,6 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 	bufIdx := 0
 
 	for parsedReq.State != StateDone {
-
 		if len(buffer) <= bufIdx {
 			newBuffer := make([]byte, 2*len(buffer))
 			copy(newBuffer, buffer[:bufIdx])
@@ -58,8 +57,26 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 		bytesRead, err := reader.Read(buffer[bufIdx:])
 		if err != nil {
 			if errors.Is(err, io.EOF) {
-				parsedReq.State = StateDone
-				break
+				// EOF hit: try to parse whatever is left in the buffer one last time
+				if bufIdx > 0 {
+					parsed, parseErr := parsedReq.parse(buffer[:bufIdx])
+					if parseErr != nil {
+						return nil, parseErr
+					}
+					// Shift any unparsed data (usually 0 if parse succeeded)
+					if parsed > 0 {
+						copy(buffer, buffer[parsed:bufIdx])
+						bufIdx -= parsed
+					}
+				}
+
+				// If parsing completed the request, we're good
+				if parsedReq.State == StateDone {
+					break
+				}
+
+				// Otherwise, the request was incomplete when connection closed
+				return nil, io.ErrUnexpectedEOF
 			}
 			return nil, err
 		}
@@ -67,16 +84,20 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 
 		//parse from the buffer
 		bytesParsed, err := parsedReq.parse(buffer[:bufIdx])
+
 		if err != nil {
 			return nil, err
 		}
+
 		copy(buffer, buffer[bytesParsed:bufIdx])
 		bufIdx -= bytesParsed
+
 	}
 	return parsedReq, nil
 }
 
 func (r *Request) parse(data []byte) (int, error) {
+
 	switch r.State {
 	case StateInitialized:
 		req, bytesParsed, err := parseRequestLine(data)
@@ -91,7 +112,9 @@ func (r *Request) parse(data []byte) (int, error) {
 		return bytesParsed, nil
 
 	case StateHeaders:
+
 		bytesRead, done, err := r.Headers.Parse(data)
+
 		if err != nil {
 			return 0, err
 		}
@@ -138,8 +161,6 @@ func parseRequestLine(req []byte) (*Request, int, error) {
 			HttpVersion:   version,
 		},
 	}
-
-	fmt.Println(reqLine)
 	return &reqLine, idx + 2, nil
 }
 

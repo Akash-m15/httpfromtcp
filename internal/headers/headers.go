@@ -38,6 +38,12 @@ func init() {
 	}
 }
 
+func (h Headers) ForEach(cb func(name, value string)) {
+	for n, v := range h {
+		cb(n, v)
+	}
+}
+
 // IsToken checks if the key conforms to the HTTP token specification.
 func IsToken(key string) bool {
 	if len(key) == 0 {

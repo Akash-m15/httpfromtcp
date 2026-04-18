@@ -72,6 +72,10 @@ func main() {
 	}
 
 	fmt.Printf("Request Line:\n- Method: %v\n- Target: %v\n- Version: %v", parsedRequest.RequestLine.Method, parsedRequest.RequestLine.RequestTarget, parsedRequest.RequestLine.HttpVersion)
+	fmt.Printf("\n\nHeaders:\n")
+	parsedRequest.Headers.ForEach(func(name, value string) {
+		fmt.Printf("- %s: %s\n", name, value)
+	})
 
 	response := "HTTP/1.1 200 OK\r\n" +
 		"Content-Length: 2\r\n" +
