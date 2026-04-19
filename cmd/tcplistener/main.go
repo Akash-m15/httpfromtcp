@@ -5,7 +5,6 @@ import (
 	"io"
 	"log"
 	"net"
-	"time"
 
 	"github.com/Akash-m15/httpfromtcp/internal/request"
 )
@@ -61,7 +60,7 @@ func main() {
 	}
 
 	conn, err := listener.Accept()
-	conn.SetReadDeadline(time.Now().Add(10 * time.Second))
+	// conn.SetReadDeadline(time.Now().Add(10 * time.Second))
 	if err != nil {
 		log.Fatalf("Error while making a connection: %v", err)
 	}
@@ -73,11 +72,13 @@ func main() {
 		return
 	}
 
-	fmt.Printf("Request Line:\n- Method: %v\n- Target: %v\n- Version: %v", parsedRequest.RequestLine.Method, parsedRequest.RequestLine.RequestTarget, parsedRequest.RequestLine.HttpVersion)
+	fmt.Printf("\n\nRequest Line:\n- Method: %v\n- Target: %v\n- Version: %v", parsedRequest.RequestLine.Method, parsedRequest.RequestLine.RequestTarget, parsedRequest.RequestLine.HttpVersion)
 	fmt.Printf("\n\nHeaders:\n")
 	parsedRequest.Headers.ForEach(func(name, value string) {
 		fmt.Printf("- %s: %s\n", name, value)
 	})
+	fmt.Printf("\nBody:\n")
+	fmt.Printf("%s", string(parsedRequest.Body))
 
 	response := "HTTP/1.1 200 OK\r\n" +
 		"Content-Length: 2\r\n" +
@@ -86,8 +87,8 @@ func main() {
 		"OK"
 
 	_, err = conn.Write([]byte(response))
+	conn.Close()
 	if err != nil {
 		log.Printf("Error writing response: %v", err)
 	}
-	conn.Close()
 }
