@@ -115,68 +115,6 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 	return parsedReq, nil
 }
 
-func (r *Request) parse2(data []byte) (int, error) {
-	fmt.Println("Inside Parse", string(data))
-	switch r.State {
-	case StateInitialized:
-		fmt.Println("Entering StateInitialized", string(data))
-		req, bytesParsed, err := parseRequestLine(data)
-		if err != nil {
-			return 0, err
-		}
-		if bytesParsed == 0 {
-			return 0, nil
-		}
-		r.RequestLine = req.RequestLine
-		r.State = StateHeaders
-		fmt.Println("Returning from StateInit: ", bytesParsed)
-		return bytesParsed, nil
-
-	case StateHeaders:
-		fmt.Println("Entering StateHeader", string(data))
-		bytesRead, done, err := r.Headers.Parse(data)
-		if err != nil {
-			return 0, err
-		}
-		if done {
-			r.State = StateBody
-			fmt.Println("Returning from StateHeaders (2): ", bytesRead)
-			return bytesRead, nil
-		} else {
-			fmt.Println("Returning from StateHeaders (1): ", bytesRead)
-			return bytesRead, nil
-		}
-
-	case StateBody:
-		fmt.Println("Enter StateBody", string(data))
-		length := getInt(r.Headers, "content-length", 0)
-		if length == 0 {
-			r.State = StateDone
-			fmt.Println("Returning from StateBody: (length = 0) ")
-			return 0, nil
-		}
-
-		remaining := min(length-len(r.Body), len(data))
-		r.Body = append(r.Body, data[:remaining]...)
-
-		if len(r.Body) == length {
-			r.State = StateDone
-			fmt.Println("Returning from StateBody: (length = body)", remaining)
-			return remaining, nil
-		}
-		if len(r.Body) > length {
-			return 0, fmt.Errorf("Body greater than content length")
-		}
-		fmt.Println("Returning from StateBody: (1) ", remaining)
-		return remaining, nil
-	case StateDone:
-		fmt.Println("Entering StateDone in Parse func")
-		return 0, fmt.Errorf("error: trying to read data  in a done state")
-	}
-
-	return 0, fmt.Errorf("error: Unknown State")
-}
-
 func (r *Request) parse(data []byte) (int, error) {
 	totalParsed := 0
 
