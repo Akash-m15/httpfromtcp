@@ -63,6 +63,7 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 	bufIdx := 0
 	fmt.Println("Parse start")
 	for parsedReq.State != StateDone {
+		fmt.Println("Inside For", string(buffer))
 		if len(buffer) <= bufIdx {
 			newBuffer := make([]byte, 2*len(buffer))
 			copy(newBuffer, buffer[:bufIdx])
@@ -71,6 +72,7 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 
 		//read into the buffer
 		bytesRead, err := reader.Read(buffer[bufIdx:])
+		fmt.Println("After Read", bytesRead, err)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				fmt.Println("Hitting EOF", bufIdx, parsedReq.State)
@@ -114,63 +116,76 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 }
 
 func (r *Request) parse(data []byte) (int, error) {
-	fmt.Println("Inside Parse", string(data))
-	switch r.State {
-	case StateInitialized:
-		req, bytesParsed, err := parseRequestLine(data)
-		if err != nil {
-			return 0, err
-		}
-		if bytesParsed == 0 {
-			return 0, nil
-		}
-		r.RequestLine = req.RequestLine
-		r.State = StateHeaders
-		fmt.Println("Returning from StateInit: ", bytesParsed)
-		return bytesParsed, nil
+	totalParsed := 0
 
-	case StateHeaders:
-		bytesRead, done, err := r.Headers.Parse(data)
-		if err != nil {
-			return 0, err
-		}
-		if done {
-			r.State = StateBody
-			fmt.Println("Returning from StateHeaders (2): ", bytesRead)
-			return bytesRead, nil
-		} else {
-			fmt.Println("Returning from StateHeaders (1): ", bytesRead)
-			return bytesRead, nil
-		}
+	for r.State != StateDone && totalParsed < len(data) {
+		switch r.State {
+		case StateInitialized:
+			req, n, err := parseRequestLine(data[totalParsed:])
+			if err != nil {
+				return 0, err
+			}
+			if n == 0 {
+				// Cannot parse request line yet, need more data
+				return totalParsed, nil
+			}
+			r.RequestLine = req.RequestLine
+			totalParsed += n
+			r.State = StateHeaders
+			// Fall through to parse headers immediately
 
-	case StateBody:
-		fmt.Println("Enter StateBody")
-		length := getInt(r.Headers, "content-length", 0)
-		if length == 0 {
-			r.State = StateDone
-			fmt.Println("Returning from StateBody: (length = 0) ")
-			return 0, nil
-		}
+		case StateHeaders:
+			n, done, err := r.Headers.Parse(data[totalParsed:])
+			if err != nil {
+				return 0, err
+			}
+			totalParsed += n
+			if done {
+				// Check if this request has a body
+				method := r.RequestLine.Method
+				hasBody := method != "GET" && method != "HEAD" && method != "DELETE"
+				contentLen := getInt(r.Headers, "content-length", 0)
 
-		remaining := min(length-len(r.Body), len(data))
-		r.Body = append(r.Body, data[:remaining]...)
+				if !hasBody || contentLen == 0 {
+					r.State = StateDone
+				} else {
+					r.State = StateBody
+				}
+			}
+			// If headers not done, we need more data → break and return
+			if !done {
+				return totalParsed, nil
+			}
+			// If done, continue loop to handle StateBody in same call
 
-		if len(r.Body) == length {
-			r.State = StateDone
-			fmt.Println("Returning from StateBody: (length = body)", remaining)
-			return remaining, nil
+		case StateBody:
+			length := getInt(r.Headers, "content-length", 0)
+			if length == 0 {
+				r.State = StateDone
+				return totalParsed, nil
+			}
+
+			remaining := length - len(r.Body)
+			available := len(data) - totalParsed
+			toRead := min(remaining, available)
+
+			r.Body = append(r.Body, data[totalParsed:totalParsed+toRead]...)
+			totalParsed += toRead
+
+			if len(r.Body) == length {
+				r.State = StateDone
+			}
+			// If body not complete, we need more data → break
+			if r.State != StateDone {
+				return totalParsed, nil
+			}
+
+		case StateDone:
+			return totalParsed, nil
 		}
-		if len(r.Body) > length {
-			return 0, fmt.Errorf("Body greater than content length")
-		}
-		fmt.Println("Returning from StateBody: (1) ", remaining)
-		return remaining, nil
-	case StateDone:
-		fmt.Println("Entering StateDone in Parse func")
-		return 0, fmt.Errorf("error: trying to read data  in a done state")
 	}
 
-	return 0, fmt.Errorf("error: Unknown State")
+	return totalParsed, nil
 }
 
 func parseRequestLine(req []byte) (*Request, int, error) {

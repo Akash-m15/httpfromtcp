@@ -26,6 +26,15 @@ func (h Headers) Set(name, value string) {
 	}
 }
 
+func (h Headers) Replace(name, value string) bool {
+	name = strings.ToLower(name)
+	_, ok := h[name]
+	if ok {
+		h[name] = value
+	}
+	return ok
+}
+
 // isTokenTable is initialized once at package load time.
 var isTokenTable [256]bool
 
