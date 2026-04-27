@@ -24,6 +24,8 @@ vendor/
 go.work
 go.work.sum
 
+*.mp4
+
 # env file
 .env
 
